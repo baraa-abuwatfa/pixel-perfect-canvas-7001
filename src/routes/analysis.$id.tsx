@@ -3,6 +3,10 @@ import { Button } from "@/components/ui/button";
 import { getOpportunity } from "@/lib/data";
 import { FitAnalysis } from "@/components/FitAnalysis";
 import { useProfile } from "@/lib/profile-context";
+import { useServerFn } from "@tanstack/react-start";
+import { useCallback } from "react";
+import { analyzeFit } from "@/lib/fit-analysis.functions";
+import type { Opportunity, Profile } from "@/lib/data";
 
 export const Route = createFileRoute("/analysis/$id")({
   loader: ({ params }) => {
@@ -35,6 +39,11 @@ export const Route = createFileRoute("/analysis/$id")({
 function Analysis() {
   const { opportunity: o } = Route.useLoaderData();
   const { profile, isSample } = useProfile();
+  const run = useServerFn(analyzeFit);
+  const analyze = useCallback(
+    (p: Profile, opp: Opportunity) => run({ data: { opportunityId: opp.id, profile: p } }),
+    [run],
+  );
   return (
     <div className="mx-auto max-w-3xl">
       <Link to="/opportunities/$id" params={{ id: o.id }} className="text-sm font-medium text-muted-foreground hover:text-foreground">
@@ -46,7 +55,7 @@ function Analysis() {
       </p>
 
       <div className="mt-8">
-        <FitAnalysis profile={profile} opportunity={o} />
+        <FitAnalysis profile={profile} opportunity={o} analyze={analyze} />
       </div>
     </div>
   );
