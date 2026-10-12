@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FitAnalysis, type FitResult } from "@/components/FitAnalysis";
+import { FitAnalysis, type FitResult, type FitResponse } from "@/components/FitAnalysis";
 import { EMPTY_PROFILE, OPPORTUNITIES, SAMPLE_PROFILE } from "@/lib/data";
 
 vi.mock("@tanstack/react-router", () => ({
@@ -9,7 +9,11 @@ vi.mock("@tanstack/react-router", () => ({
 afterEach(cleanup);
 const opportunity = OPPORTUNITIES[0];
 if (!opportunity) throw new Error("Test requires an opportunity");
-const result: FitResult = { relevant: ["Python experience"], gaps: ["API experience"], steps: ["Build an API project"] };
+const result: FitResponse = { ok: true, result: {
+  relevantSkills: [{ item: "Python experience", evidence: "Built scripts", relevance: "Role uses Python" }],
+  potentialGaps: [{ requirement: "API experience", reason: "No evidence in profile" }],
+  recommendedNextSteps: [{ action: "Build an API project", reason: "Shows API skills" }],
+} satisfies FitResult };
 
 describe("Fit analysis interface", () => {
   it("starts idle with all three empty result sections and honest availability", () => {
@@ -34,15 +38,15 @@ describe("Fit analysis interface", () => {
   });
 
   it("shows loading only during a request, disables duplicates, then renders its result", async () => {
-    let resolveRequest: ((result: FitResult) => void) | undefined;
-    const analyze = vi.fn(() => new Promise<FitResult>((resolve) => { resolveRequest = resolve; }));
+    let resolveRequest: ((result: FitResponse) => void) | undefined;
+    const analyze = vi.fn(() => new Promise<FitResponse>((resolve) => { resolveRequest = resolve; }));
     render(<FitAnalysis profile={SAMPLE_PROFILE} opportunity={opportunity} analyze={analyze} />);
     fireEvent.click(screen.getByRole("button", { name: "Analyze My Fit" }));
     expect(screen.getByRole("button", { name: "Analyzing…" })).toBeDisabled();
     expect(screen.getByText("Analyzing your fit…")).toBeInTheDocument();
     await act(async () => { resolveRequest?.(result); });
     expect(screen.getByText("Analysis complete")).toBeInTheDocument();
-    for (const item of Object.values(result).flat()) expect(screen.getByText(item)).toBeInTheDocument();
+    for (const item of ["Python experience", "API experience", "Build an API project"]) expect(screen.getByText(item)).toBeInTheDocument();
     expect(analyze).toHaveBeenCalledTimes(1);
   });
 
@@ -57,7 +61,7 @@ describe("Fit analysis interface", () => {
   });
 
   it("rejects malformed results instead of claiming success", async () => {
-    const analyze = vi.fn().mockResolvedValue({ relevant: ["Python"] });
+    const analyze = vi.fn().mockResolvedValue({ ok: true, result: { relevantSkills: [] } });
     render(<FitAnalysis profile={SAMPLE_PROFILE} opportunity={opportunity} analyze={analyze} />);
     fireEvent.click(screen.getByRole("button", { name: "Analyze My Fit" }));
     expect(await screen.findByRole("alert")).toBeInTheDocument();
@@ -65,8 +69,8 @@ describe("Fit analysis interface", () => {
   });
 
   it("discards stale results when the profile changes", async () => {
-    let resolveRequest: ((result: FitResult) => void) | undefined;
-    const analyze = () => new Promise<FitResult>((resolve) => { resolveRequest = resolve; });
+    let resolveRequest: ((result: FitResponse) => void) | undefined;
+    const analyze = () => new Promise<FitResponse>((resolve) => { resolveRequest = resolve; });
     const { rerender } = render(<FitAnalysis profile={SAMPLE_PROFILE} opportunity={opportunity} analyze={analyze} />);
     fireEvent.click(screen.getByRole("button", { name: "Analyze My Fit" }));
     rerender(<FitAnalysis profile={EMPTY_PROFILE} opportunity={opportunity} analyze={analyze} />);

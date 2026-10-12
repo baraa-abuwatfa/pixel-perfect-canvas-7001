@@ -4,26 +4,34 @@ import { AlertCircle, CheckCircle2, CircleDashed, LoaderCircle, Sparkles } from 
 import { Button } from "@/components/ui/button";
 import type { Opportunity, Profile } from "@/lib/data";
 
-export type FitResult = { relevant: string[]; gaps: string[]; steps: string[] };
+export type FitResult = {
+  relevantSkills: { item: string; evidence: string; relevance: string }[];
+  potentialGaps: { requirement: string; reason: string }[];
+  recommendedNextSteps: { action: string; reason: string }[];
+};
+export type FitResponse = { ok: true; result: FitResult } | { ok: false; reason: "unavailable" | "invalid" | "error" };
 type AnalysisState =
   | { kind: "idle" }
   | { kind: "analyzing" }
   | { kind: "insufficient" }
   | { kind: "unavailable" }
-  | { kind: "error" }
+  | { kind: "error"; invalid?: boolean }
   | { kind: "success"; result: FitResult };
 
 type Props = {
   profile: Profile;
   opportunity: Opportunity;
   /** Supply only a real analysis request; absence means no AI service is configured. */
-  analyze?: (profile: Profile, opportunity: Opportunity) => Promise<FitResult>;
+  analyze?: (profile: Profile, opportunity: Opportunity) => Promise<FitResponse>;
 };
 
-function validResult(value: FitResult): boolean {
-  return value != null && [value.relevant, value.gaps, value.steps].every(
-    (items) => Array.isArray(items) && items.every((item) => typeof item === "string" && item.trim().length > 0),
-  );
+const filled = (v: unknown) => typeof v === "string" && v.trim().length > 0;
+function validList(items: unknown, keys: string[]) {
+  return Array.isArray(items) && items.every((i) => i && typeof i === "object" && keys.every((k) => filled((i as Record<string, unknown>)[k])));
+}
+function validResult(value: FitResult | undefined): value is FitResult {
+  return value != null && validList(value.relevantSkills, ["item", "evidence", "relevance"]) &&
+    validList(value.potentialGaps, ["requirement", "reason"]) && validList(value.recommendedNextSteps, ["action", "reason"]);
 }
 
 export function FitAnalysis({ profile, opportunity, analyze }: Props) {
@@ -52,9 +60,11 @@ export function FitAnalysis({ profile, opportunity, analyze }: Props) {
     pending.current = true;
     setState({ kind: "analyzing" });
     try {
-      const result = await analyze(profile, opportunity);
+      const res = await analyze(profile, opportunity);
       if (id !== requestId.current) return;
-      setState(validResult(result) ? { kind: "success", result } : { kind: "error" });
+      if (res?.ok && validResult(res.result)) setState({ kind: "success", result: res.result });
+      else if (res && !res.ok && res.reason === "unavailable") setState({ kind: "unavailable" });
+      else setState({ kind: "error", invalid: !res || res.ok || res.reason === "invalid" });
     } catch {
       if (id === requestId.current) setState({ kind: "error" });
     } finally {
@@ -66,8 +76,8 @@ export function FitAnalysis({ profile, opportunity, analyze }: Props) {
     idle: { title: "Ready to check your fit", body: "No analysis has been performed yet." },
     analyzing: { title: "Analyzing your fit…", body: "Reviewing your skills, projects, and experience against this opportunity." },
     insufficient: { title: "Not enough profile information", body: "Add skills, a project, or experience to your profile before requesting an analysis." },
-    unavailable: { title: "Real AI analysis is unavailable", body: "No AI service is configured. No AI analysis of your profile has been performed." },
-    error: { title: "We couldn’t complete your analysis", body: "The analysis request failed or returned an incomplete response. Please try again. No new results are available." },
+    unavailable: { title: "Real AI analysis is unavailable", body: analyze ? "The AI service is temporarily unavailable. No analysis of your profile has been performed. Please try again later." : "No AI service is configured. No AI analysis of your profile has been performed." },
+    error: { title: "We couldn’t complete your analysis", body: state.kind === "error" && state.invalid ? "The AI returned a response that couldn’t be verified, so it isn’t shown. Please try again." : "The analysis request failed. Please try again. No new results are available." },
     success: { title: "Analysis complete", body: "Your profile has been reviewed against this opportunity." },
   };
   const notice = notices[state.kind];
@@ -75,10 +85,11 @@ export function FitAnalysis({ profile, opportunity, analyze }: Props) {
     ["error", "insufficient", "unavailable"].includes(state.kind) ? AlertCircle : CircleDashed;
   const tone = state.kind === "error" ? "border-destructive/40 bg-destructive/10" :
     state.kind === "unavailable" || state.kind === "insufficient" ? "border-warning/40 bg-warning/10" : "border-border bg-muted/50";
+  const r = state.kind === "success" ? state.result : null;
   const sections = [
-    { title: "Relevant Skills", items: state.kind === "success" ? state.result.relevant : null, dot: "bg-success", empty: "No relevant skills were identified in this analysis." },
-    { title: "Potential Gaps", items: state.kind === "success" ? state.result.gaps : null, dot: "bg-warning", empty: "No potential gaps were identified in this analysis." },
-    { title: "Recommended Next Steps", items: state.kind === "success" ? state.result.steps : null, dot: "bg-primary", empty: "No next steps were recommended in this analysis." },
+    { title: "Relevant Skills", items: r ? r.relevantSkills.map((x) => ({ head: x.item, lines: [["Evidence", x.evidence], ["Relevance", x.relevance]] })) : null, dot: "bg-success", empty: "No relevant skills were identified in this analysis." },
+    { title: "Potential Gaps", items: r ? r.potentialGaps.map((x) => ({ head: x.requirement, lines: [["Why", x.reason]] })) : null, dot: "bg-warning", empty: "No potential gaps were identified in this analysis." },
+    { title: "Recommended Next Steps", items: r ? r.recommendedNextSteps.map((x) => ({ head: x.action, lines: [["Why", x.reason]] })) : null, dot: "bg-primary", empty: "No next steps were recommended in this analysis." },
   ];
 
   return (
@@ -89,7 +100,7 @@ export function FitAnalysis({ profile, opportunity, analyze }: Props) {
           <div>
             <h2 className="text-lg font-semibold">{notice.title}</h2>
             <p className="mt-1 text-sm text-muted-foreground">{notice.body}</p>
-            {!analyze && state.kind !== "unavailable" && (
+            {!analyze && (state.kind !== "unavailable" || analyze) && (
               <p className="mt-2 text-sm text-muted-foreground">Real AI analysis is unavailable because no AI service is configured.</p>
             )}
           </div>
@@ -97,10 +108,10 @@ export function FitAnalysis({ profile, opportunity, analyze }: Props) {
         <div className="mt-4 flex flex-wrap gap-3">
           {state.kind === "insufficient" ? (
             <Button asChild><Link to="/profile">Complete My Profile</Link></Button>
-          ) : state.kind !== "unavailable" && (
+          ) : (state.kind !== "unavailable" || analyze) && (
             <Button onClick={start} disabled={state.kind === "analyzing"}>
               {state.kind === "analyzing" ? <LoaderCircle aria-hidden="true" className="animate-spin motion-reduce:animate-none" /> : <Sparkles aria-hidden="true" />}
-              {state.kind === "analyzing" ? "Analyzing…" : state.kind === "error" ? "Try again" : state.kind === "success" ? "Analyze Again" : "Analyze My Fit"}
+              {state.kind === "analyzing" ? "Analyzing…" : state.kind === "error" || state.kind === "unavailable" ? "Try again" : state.kind === "success" ? "Analyze Again" : "Analyze My Fit"}
             </Button>
           )}
         </div>
@@ -114,8 +125,15 @@ export function FitAnalysis({ profile, opportunity, analyze }: Props) {
               {section.title}
             </h3>
             {section.items ? section.items.length ? (
-              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-muted-foreground">
-                {section.items.map((item, index) => <li key={index} className="break-words">{item}</li>)}
+              <ul className="mt-3 space-y-3 text-sm">
+                {section.items.map((item, index) => (
+                  <li key={index} className="break-words rounded-md border border-border p-3">
+                    <p className="font-medium">{item.head}</p>
+                    {item.lines.map(([label, text]) => (
+                      <p key={label} className="mt-1 text-muted-foreground"><span className="font-medium text-foreground/80">{label}:</span> {text}</p>
+                    ))}
+                  </li>
+                ))}
               </ul>
             ) : <p className="mt-3 text-sm text-muted-foreground">{section.empty}</p> : (
               <p className="mt-3 text-sm text-muted-foreground">
