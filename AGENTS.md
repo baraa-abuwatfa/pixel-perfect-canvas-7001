@@ -11,5 +11,5 @@
 
 ## Architecture
 - Profile and selected opportunity live in React context (src/lib/profile-context.tsx), no database — the brief forbids persistence.
-- Fit analysis returns an "unavailable" state while no AI service is configured; any demo result must be labeled as a demonstration — honesty requirement.
+- Fit analysis runs server-side (src/lib/fit-analysis.server.ts via a server function) and is validated with a zod schema before display; failures map to unavailable/error states, never fallback results — honesty requirement and keeps the key off the client.
 - Keep fit-analysis request states in the FitAnalysis presentation component; only a real request adapter may supply success results, so an unconfigured service never simulates analysis.
