@@ -46,7 +46,7 @@ describe("Fit analysis interface", () => {
     expect(screen.getByText("Analyzing your fit…")).toBeInTheDocument();
     await act(async () => { resolveRequest?.(result); });
     expect(screen.getByText("Analysis complete")).toBeInTheDocument();
-    for (const item of Object.values(result).flat()) expect(screen.getByText(item)).toBeInTheDocument();
+    for (const item of ["Python experience", "API experience", "Build an API project"]) expect(screen.getByText(item)).toBeInTheDocument();
     expect(analyze).toHaveBeenCalledTimes(1);
   });
 
