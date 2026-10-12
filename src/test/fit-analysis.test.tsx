@@ -21,7 +21,7 @@ describe("Fit analysis interface", () => {
     expect(screen.getByText(/Real AI analysis is unavailable/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Analyze My Fit" }));
     expect(screen.getByText("Real AI analysis is unavailable")).toBeInTheDocument();
-    expect(screen.queryByText(result.relevant[0])).not.toBeInTheDocument();
+    expect(screen.queryByText("Python experience")).not.toBeInTheDocument();
   });
 
   it("requires profile information without making a request", () => {
