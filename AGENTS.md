@@ -12,3 +12,4 @@
 ## Architecture
 - Profile and selected opportunity live in React context (src/lib/profile-context.tsx), no database — the brief forbids persistence.
 - Fit analysis returns an "unavailable" state while no AI service is configured; any demo result must be labeled as a demonstration — honesty requirement.
+- Keep fit-analysis request states in the FitAnalysis presentation component; only a real request adapter may supply success results, so an unconfigured service never simulates analysis.
