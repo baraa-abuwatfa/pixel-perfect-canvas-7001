@@ -8,3 +8,7 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+## Architecture
+- Profile and selected opportunity live in React context (src/lib/profile-context.tsx), no database — the brief forbids persistence.
+- Fit analysis returns an "unavailable" state while no AI service is configured; any demo result must be labeled as a demonstration — honesty requirement.
